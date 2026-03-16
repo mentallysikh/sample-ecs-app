@@ -72,8 +72,7 @@ async def run():
             await page.wait_for_timeout(3000)
             await page.screenshot(path="pw_01_login.png")
             print("[PW] Logged in")
-
-            # ── Navigate to Applications ──────────────────────────────────
+# ── Navigate to Applications ──────────────────────────────────
             print("[PW] Navigating to Applications...")
             await page.goto(
                 f"https://{REGION}.console.aws.amazon.com/singlesignon/home#/applications",
@@ -82,59 +81,57 @@ async def run():
             )
             await page.wait_for_timeout(5000)
             await page.screenshot(path="pw_02_applications.png")
+            print("[PW] On applications page")
 
-            # ── Dump page HTML for debugging ──────────────────────────────
-            content = await page.content()
-            with open("pw_page_content.html", "w") as f:
-                f.write(content)
-            print("[PW] Page content saved")
+            # Check if we're already on the add application wizard
+            # or if we need to click Add application first
+            recommended_visible = await page.is_visible('button:has-text("Recommended")')
+            add_app_visible     = await page.is_visible('button:has-text("Add application")')
 
-            # ── Print all visible button texts ────────────────────────────
+            print(f"[PW] Recommended visible: {recommended_visible}")
+            print(f"[PW] Add application visible: {add_app_visible}")
+
+            if add_app_visible:
+                print("[PW] Clicking Add application...")
+                await page.click('button:has-text("Add application")')
+                await page.wait_for_timeout(3000)
+                await page.screenshot(path="pw_03_add_app.png")
+            else:
+                print("[PW] Already on wizard page — skipping Add application click")
+                await page.screenshot(path="pw_03_already_on_wizard.png")
+
+            # ── Select Customer managed (custom app) ──────────────────────
+            print("[PW] Selecting Customer managed application...")
+            try:
+                await page.wait_for_selector(
+                    'button:has-text("Customer managed")',
+                    timeout=10000
+                )
+                await page.click('button:has-text("Customer managed")')
+                await page.wait_for_timeout(1000)
+                await page.screenshot(path="pw_04_selected_type.png")
+                print("[PW] Selected Customer managed")
+            except Exception as e:
+                print(f"[PW] Could not click Customer managed: {e}")
+                await page.screenshot(path="pw_04_type_error.png")
+
+            # ── Click Next ────────────────────────────────────────────────
+            await page.wait_for_selector('button:has-text("Next")', timeout=10000)
+            await page.click('button:has-text("Next")')
+            await page.wait_for_timeout(3000)
+            await page.screenshot(path="pw_05_after_next.png")
+
+            # ── Print buttons again to see what's on next page ────────────
             buttons = await page.query_selector_all("button")
-            print(f"[PW] Found {len(buttons)} buttons on page:")
+            print(f"[PW] Buttons after Next:")
             for btn in buttons:
                 try:
                     txt = await btn.inner_text()
                     vis = await btn.is_visible()
-                    if txt.strip():
-                        print(f"  button: '{txt.strip()}' visible={vis}")
+                    if txt.strip() and vis:
+                        print(f"  button: '{txt.strip()}'")
                 except Exception:
                     pass
-
-            print("[PW] On applications page")
-
-            # ── Click Add application ─────────────────────────────────────
-            print("[PW] Clicking Add application...")
-            await page.wait_for_selector(
-                'button:has-text("Add application")',
-                timeout=20000
-            )
-            await page.click('button:has-text("Add application")')
-            await page.wait_for_timeout(3000)
-            await page.screenshot(path="pw_03_add_app.png")
-
-            # ── Select custom app option ──────────────────────────────────
-            print("[PW] Selecting custom application type...")
-            try:
-                await page.wait_for_selector(
-                    'label:has-text("I have an application I want to set up")',
-                    timeout=10000
-                )
-                await page.click(
-                    'label:has-text("I have an application I want to set up")'
-                )
-            except Exception:
-                print("[PW] Trying radio button instead...")
-                radios = await page.query_selector_all('input[type="radio"]')
-                if radios:
-                    await radios[-1].click()
-
-            await page.wait_for_timeout(1000)
-            await page.screenshot(path="pw_04_selected_type.png")
-
-            await page.click('button:has-text("Next")')
-            await page.wait_for_timeout(3000)
-            await page.screenshot(path="pw_05_app_details.png")
 
             # ── Fill display name ─────────────────────────────────────────
             print(f"[PW] Filling app name: {APP_NAME}")
@@ -177,10 +174,8 @@ async def run():
                 )
                 await page.click('button:has-text("Assign users and groups")')
                 await page.wait_for_timeout(2000)
-
                 await page.fill('input[type="search"]', "DemoGroup")
                 await page.wait_for_timeout(2000)
-
                 await page.click('input[type="checkbox"]')
                 await page.wait_for_timeout(500)
                 await page.click('button:has-text("Assign")')
@@ -190,14 +185,3 @@ async def run():
             except Exception as e:
                 print(f"[PW] Group assignment skipped: {e}")
                 await page.screenshot(path="pw_08_group_error.png")
-
-        except Exception as e:
-            print(f"[PW ERROR] {e}")
-            await page.screenshot(path="pw_error.png")
-            raise
-        finally:
-            await browser.close()
-            print("[PW] Done")
-
-if __name__ == "__main__":
-    asyncio.run(run())
