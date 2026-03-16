@@ -97,7 +97,7 @@ def create_iam_role(idp_arn):
         iam.create_role(
             RoleName=ROLE_NAME,
             AssumeRolePolicyDocument=trust_policy,
-            Description="Federated role trusting DemoIdP — created by Jenkins"
+            Description="Federated role trusting DemoIdP created by Jenkins"
         )
         iam.attach_role_policy(
             RoleName=ROLE_NAME,
