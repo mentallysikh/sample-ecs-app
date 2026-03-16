@@ -48,6 +48,34 @@ def get_federation_url():
     return login_url
 
 
+async def click_next(page):
+    """Click the last visible Next button on the page."""
+    next_buttons = await page.query_selector_all('button:has-text("Next")')
+    for btn in reversed(next_buttons):
+        try:
+            if await btn.is_visible():
+                await btn.click()
+                await page.wait_for_timeout(3000)
+                return True
+        except Exception:
+            continue
+    return False
+
+
+async def dump_buttons(page, label):
+    """Print all visible buttons and save screenshot."""
+    await page.screenshot(path=f"{label}.png")
+    buttons = await page.query_selector_all("button")
+    print(f"[PW] {label} buttons:")
+    for btn in buttons:
+        try:
+            txt = await btn.inner_text()
+            if txt.strip() and await btn.is_visible():
+                print(f"  '{txt.strip()}'")
+        except Exception:
+            pass
+
+
 async def run():
     login_url = get_federation_url()
 
@@ -71,7 +99,6 @@ async def run():
             print("[PW] Opening federated session...")
             await page.goto(login_url, timeout=60000, wait_until=LOAD)
             await page.wait_for_timeout(3000)
-            await page.screenshot(path="pw_01_login.png")
             print("[PW] Logged in")
 
             # ── Go directly to Add Application wizard ─────────────────────
@@ -83,12 +110,10 @@ async def run():
                 wait_until=LOAD
             )
             await page.wait_for_timeout(5000)
-            await page.screenshot(path="pw_02_wizard.png")
-            print("[PW] On wizard page")
+            await dump_buttons(page, "pw_01_wizard_start")
 
-            # ── Fill display name ─────────────────────────────────────────
-            # Confirmed selector from debug: placeholder="Enter an application display name"
-            print(f"[PW] Filling app name: {APP_NAME}")
+            # ── Step 1: Fill name and URL ─────────────────────────────────
+            print(f"[PW] Step 1 — filling app name: {APP_NAME}")
             await page.wait_for_selector(
                 'input[placeholder*="application display name"]',
                 timeout=15000,
@@ -99,10 +124,7 @@ async def run():
                 APP_NAME
             )
             print("[PW] App name filled")
-            await page.screenshot(path="pw_03_name_filled.png")
 
-            # ── Fill application URL ──────────────────────────────────────
-            print("[PW] Filling application URL...")
             try:
                 await page.fill(
                     'input[placeholder*="application URL"]',
@@ -113,74 +135,51 @@ async def run():
             except Exception:
                 print("[PW] URL field not found — skipping")
 
-            await page.screenshot(path="pw_04_url_filled.png")
+            await page.screenshot(path="pw_02_step1_filled.png")
 
-            # ── Click Next ────────────────────────────────────────────────
-            print("[PW] Clicking Next...")
-            next_buttons = await page.query_selector_all('button:has-text("Next")')
-            for btn in reversed(next_buttons):
-                try:
-                    vis = await btn.is_visible()
-                    if vis:
-                        await btn.click()
-                        print("[PW] Clicked Next")
-                        break
-                except Exception:
-                    continue
+            # ── Step 1 → Next ─────────────────────────────────────────────
+            print("[PW] Step 1 — clicking Next...")
+            await click_next(page)
+            await dump_buttons(page, "pw_03_step2")
 
-            await page.wait_for_timeout(3000)
-            await page.screenshot(path="pw_05_after_next.png")
+            # ── Step 2: Keep clicking Next until we reach the final button ─
+            step = 2
+            while True:
+                # Check if we've reached the final button
+                for final_btn in ["Done", "Submit", "Create", "Finish"]:
+                    if await page.is_visible(f'button:has-text("{final_btn}")'):
+                        print(f"[PW] Found final button: '{final_btn}'")
+                        await page.click(f'button:has-text("{final_btn}")')
+                        await page.wait_for_timeout(4000)
+                        await page.screenshot(path="pw_final_submitted.png")
+                        print(f"[PW] Application '{APP_NAME}' created!")
+                        # Break out of while loop
+                        raise StopIteration
 
-            # ── Debug: what's on this page? ───────────────────────────────
-            buttons = await page.query_selector_all("button")
-            print("[PW] Buttons after Next:")
-            for btn in buttons:
-                try:
-                    txt = await btn.inner_text()
-                    vis = await btn.is_visible()
-                    if txt.strip() and vis:
-                        print(f"  btn: '{txt.strip()}'")
-                except Exception:
-                    pass
+                # Still have Next — click it
+                next_visible = await page.is_visible('button:has-text("Next")')
+                if next_visible:
+                    print(f"[PW] Step {step} — clicking Next...")
+                    await click_next(page)
+                    step += 1
+                    await dump_buttons(page, f"pw_0{step+2}_step{step}")
+                else:
+                    # No Next and no final button — something went wrong
+                    await page.screenshot(path="pw_stuck.png")
+                    raise Exception(
+                        f"Stuck on step {step} — no Next or final button found"
+                    )
 
-            inputs = await page.query_selector_all("input")
-            print("[PW] Inputs after Next:")
-            for inp in inputs:
-                try:
-                    vis = await inp.is_visible()
-                    iplaceholder = await inp.get_attribute("placeholder")
-                    itype = await inp.get_attribute("type")
-                    if vis:
-                        print(f"  input type={itype} placeholder={iplaceholder}")
-                except Exception:
-                    pass
+        except StopIteration:
+            # Successfully clicked the final button
+            pass
 
-            # ── Click whatever the final button is ────────────────────────
-            print("[PW] Looking for final action button...")
-            for btn_text in ["Done", "Submit", "Create", "Finish", "Save", "Next"]:
-                try:
-                    btn = page.locator(f'button:has-text("{btn_text}")')
-                    if await btn.is_visible(timeout=3000):
-                        await btn.click()
-                        print(f"[PW] Clicked '{btn_text}'")
-                        await page.wait_for_timeout(3000)
-                        await page.screenshot(path="pw_06_final.png")
-                        break
-                except Exception:
-                    continue
-            # ── Click Done ────────────────────────────────────────────────
-            # Confirmed from debug: button says "Done" not "Submit"
-            print("[PW] Clicking Done...")
-            await page.wait_for_selector(
-                'button:has-text("Done")',
-                timeout=10000,
-                state="visible"
-            )
-            await page.click('button:has-text("Done")')
-            await page.wait_for_timeout(4000)
-            await page.screenshot(path="pw_06_done.png")
-            print(f"[PW] Application '{APP_NAME}' created successfully")
+        except Exception as e:
+            print(f"[PW ERROR] {e}")
+            await page.screenshot(path="pw_error.png")
+            raise
 
+        finally:
             # ── Assign DemoGroup ──────────────────────────────────────────
             print("[PW] Assigning DemoGroup...")
             try:
@@ -196,18 +195,12 @@ async def run():
                 await page.wait_for_timeout(500)
                 await page.click('button:has-text("Assign")')
                 await page.wait_for_timeout(2000)
-                await page.screenshot(path="pw_07_group_assigned.png")
+                await page.screenshot(path="pw_group_assigned.png")
                 print("[PW] DemoGroup assigned")
             except Exception as e:
                 print(f"[PW] Group assignment skipped: {e}")
-                await page.screenshot(path="pw_07_group_error.png")
+                await page.screenshot(path="pw_group_error.png")
 
-        except Exception as e:
-            print(f"[PW ERROR] {e}")
-            await page.screenshot(path="pw_error.png")
-            raise
-
-        finally:
             await browser.close()
             print("[PW] Done")
 
