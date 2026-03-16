@@ -1,59 +1,31 @@
 import boto3
 import json
 
-REGION              = "us-east-1"
-PERMISSION_SET_NAME = "DemoPermissionSet"
-TARGET_ACCOUNT_ID   = "199570264160"
-GROUP_NAME          = "DemoGroup"
-USER_EMAIL          = "demo-user@example.com"
-USER_FIRSTNAME      = "Demo"
-USER_LASTNAME       = "User"
-IDP_NAME            = "DemoIdP"
-ROLE_NAME           = "DemoSSOFederatedRole"
+REGION             = "us-east-1"
+TARGET_ACCOUNT_ID  = "199570264160"
+GROUP_NAME         = "DemoGroup"
+USER_EMAIL         = "demo-user@example.com"
+USER_FIRSTNAME     = "Demo"
+USER_LASTNAME      = "User"
+IDP_NAME           = "DemoIdP"
+ROLE_NAME          = "DemoSSOFederatedRole"
 
 sso = boto3.client("sso-admin",     region_name=REGION)
 ids = boto3.client("identitystore", region_name=REGION)
 iam = boto3.client("iam",           region_name=REGION)
 
+# ── 1. Get SSO Instance ───────────────────────────────────────────────────────
 def get_sso_instance():
-    resp     = sso.list_instances()
-    instance = resp["Instances"][0]
-    print(f"[BOTO3] SSO Instance ARN : {instance['InstanceArn']}")
-    print(f"[BOTO3] Identity Store ID: {instance['IdentityStoreId']}")
-    return instance["InstanceArn"], instance["IdentityStoreId"]
+    resp = sso.list_instances()
+    # Pick the instance owned by THIS account (sandbox)
+    for instance in resp["Instances"]:
+        if instance["OwnerAccountId"] == TARGET_ACCOUNT_ID:
+            print(f"[BOTO3] SSO Instance ARN : {instance['InstanceArn']}")
+            print(f"[BOTO3] Identity Store ID: {instance['IdentityStoreId']}")
+            return instance["InstanceArn"], instance["IdentityStoreId"]
+    raise Exception(f"No SSO instance found for account {TARGET_ACCOUNT_ID}")
 
-def create_permission_set(instance_arn):
-    try:
-        resp = sso.create_permission_set(
-            Name=PERMISSION_SET_NAME,
-            InstanceArn=instance_arn,
-            Description="Demo permission set created by Jenkins pipeline",
-            SessionDuration="PT8H"
-        )
-        arn = resp["PermissionSet"]["PermissionSetArn"]
-        print(f"[BOTO3] Permission Set created: {arn}")
-    except sso.exceptions.ConflictException:
-        pages = sso.get_paginator("list_permission_sets").paginate(
-            InstanceArn=instance_arn
-        )
-        for page in pages:
-            for ps_arn in page["PermissionSets"]:
-                detail = sso.describe_permission_set(
-                    InstanceArn=instance_arn,
-                    PermissionSetArn=ps_arn
-                )
-                if detail["PermissionSet"]["Name"] == PERMISSION_SET_NAME:
-                    arn = ps_arn
-                    print(f"[BOTO3] Permission Set already exists: {arn}")
-                    break
-    sso.attach_managed_policy_to_permission_set(
-        InstanceArn=instance_arn,
-        PermissionSetArn=arn,
-        ManagedPolicyArn="arn:aws:iam::aws:policy/ReadOnlyAccess"
-    )
-    print("[BOTO3] Attached ReadOnlyAccess to permission set")
-    return arn
-
+# ── 2. Create IdP (SAML Provider) ─────────────────────────────────────────────
 def create_idp():
     saml_metadata = """<?xml version="1.0"?>
 <EntityDescriptor
@@ -79,6 +51,7 @@ def create_idp():
         print(f"[BOTO3] IdP already exists: {idp_arn}")
     return idp_arn
 
+# ── 3. Create IAM Role with IdP Trust ─────────────────────────────────────────
 def create_iam_role(idp_arn):
     trust_policy = json.dumps({
         "Version": "2012-10-17",
@@ -107,6 +80,7 @@ def create_iam_role(idp_arn):
     except iam.exceptions.EntityAlreadyExistsException:
         print(f"[BOTO3] IAM Role '{ROLE_NAME}' already exists")
 
+# ── 4. Create User ─────────────────────────────────────────────────────────────
 def create_user(identity_store_id):
     try:
         resp    = ids.create_user(
@@ -131,6 +105,7 @@ def create_user(identity_store_id):
         print(f"[BOTO3] User already exists: {user_id}")
     return user_id
 
+# ── 5. Create Group ────────────────────────────────────────────────────────────
 def create_group(identity_store_id):
     try:
         resp     = ids.create_group(
@@ -154,6 +129,7 @@ def create_group(identity_store_id):
         print(f"[BOTO3] Group already exists: {group_id}")
     return group_id
 
+# ── 6. Add User to Group ───────────────────────────────────────────────────────
 def add_user_to_group(identity_store_id, group_id, user_id):
     try:
         ids.create_group_membership(
@@ -165,32 +141,19 @@ def add_user_to_group(identity_store_id, group_id, user_id):
     except ids.exceptions.ConflictException:
         print("[BOTO3] User already in group")
 
-def assign_account(instance_arn, permission_set_arn, group_id):
-    try:
-        sso.create_account_assignment(
-            InstanceArn=instance_arn,
-            TargetId=TARGET_ACCOUNT_ID,
-            TargetType="AWS_ACCOUNT",
-            PermissionSetArn=permission_set_arn,
-            PrincipalType="GROUP",
-            PrincipalId=group_id
-        )
-        print(f"[BOTO3] Account assignment created for {TARGET_ACCOUNT_ID}")
-    except sso.exceptions.ConflictException:
-        print("[BOTO3] Account assignment already exists")
-
+# ── Main ───────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     print("=" * 50)
-    print("  BOTO3 PHASE: Roles, IdP, Users, Groups")
+    print("  BOTO3 PHASE: IdP, Role, Users, Groups")
     print("=" * 50)
+
     instance_arn, identity_store_id = get_sso_instance()
-    ps_arn   = create_permission_set(instance_arn)
     idp_arn  = create_idp()
     create_iam_role(idp_arn)
     user_id  = create_user(identity_store_id)
     group_id = create_group(identity_store_id)
     add_user_to_group(identity_store_id, group_id, user_id)
-    assign_account(instance_arn, ps_arn, group_id)
+
     print("=" * 50)
     print("  BOTO3 PHASE COMPLETE")
     print("=" * 50)
