@@ -117,7 +117,6 @@ async def run():
 
             # ── Click Next ────────────────────────────────────────────────
             print("[PW] Clicking Next...")
-            # There are two Next buttons — click the last visible one (form Next)
             next_buttons = await page.query_selector_all('button:has-text("Next")')
             for btn in reversed(next_buttons):
                 try:
@@ -132,6 +131,43 @@ async def run():
             await page.wait_for_timeout(3000)
             await page.screenshot(path="pw_05_after_next.png")
 
+            # ── Debug: what's on this page? ───────────────────────────────
+            buttons = await page.query_selector_all("button")
+            print("[PW] Buttons after Next:")
+            for btn in buttons:
+                try:
+                    txt = await btn.inner_text()
+                    vis = await btn.is_visible()
+                    if txt.strip() and vis:
+                        print(f"  btn: '{txt.strip()}'")
+                except Exception:
+                    pass
+
+            inputs = await page.query_selector_all("input")
+            print("[PW] Inputs after Next:")
+            for inp in inputs:
+                try:
+                    vis = await inp.is_visible()
+                    iplaceholder = await inp.get_attribute("placeholder")
+                    itype = await inp.get_attribute("type")
+                    if vis:
+                        print(f"  input type={itype} placeholder={iplaceholder}")
+                except Exception:
+                    pass
+
+            # ── Click whatever the final button is ────────────────────────
+            print("[PW] Looking for final action button...")
+            for btn_text in ["Done", "Submit", "Create", "Finish", "Save", "Next"]:
+                try:
+                    btn = page.locator(f'button:has-text("{btn_text}")')
+                    if await btn.is_visible(timeout=3000):
+                        await btn.click()
+                        print(f"[PW] Clicked '{btn_text}'")
+                        await page.wait_for_timeout(3000)
+                        await page.screenshot(path="pw_06_final.png")
+                        break
+                except Exception:
+                    continue
             # ── Click Done ────────────────────────────────────────────────
             # Confirmed from debug: button says "Done" not "Submit"
             print("[PW] Clicking Done...")
