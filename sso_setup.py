@@ -113,6 +113,7 @@ def create_user(identity_store_id):
         resp    = ids.create_user(
             IdentityStoreId=identity_store_id,
             UserName=USER_EMAIL,
+            DisplayName=f"{USER_FIRSTNAME} {USER_LASTNAME}",
             Name={"GivenName": USER_FIRSTNAME, "FamilyName": USER_LASTNAME},
             Emails=[{"Value": USER_EMAIL, "Type": "work", "Primary": True}]
         )
