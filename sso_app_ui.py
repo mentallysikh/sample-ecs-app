@@ -63,89 +63,116 @@ async def run():
         )
         page = await context.new_page()
 
+        # Use domcontentloaded everywhere — networkidle times out on AWS console
+        LOAD = "domcontentloaded"
+
         try:
-            # Login via federation
+            # ── Login via federation ──────────────────────────────────────
             print("[PW] Opening federated session...")
-            await page.goto(login_url, timeout=60000)
-            await page.wait_for_load_state("networkidle", timeout=60000)
+            await page.goto(login_url, timeout=60000, wait_until=LOAD)
+            await page.wait_for_timeout(3000)
             await page.screenshot(path="pw_01_login.png")
             print("[PW] Logged in")
 
-            # Go to Applications
+            # ── Navigate to Applications ──────────────────────────────────
             print("[PW] Navigating to Applications...")
             await page.goto(
-                f"https://{REGION}.console.aws.amazon.com"
-                f"/singlesignon/home#/applications",
-                timeout=60000
+                f"https://{REGION}.console.aws.amazon.com/singlesignon/home#/applications",
+                timeout=60000,
+                wait_until=LOAD
             )
-            await page.wait_for_load_state("networkidle")
+            await page.wait_for_timeout(4000)
             await page.screenshot(path="pw_02_applications.png")
+            print("[PW] On applications page")
 
-            # Click Add application
+            # ── Click Add application ─────────────────────────────────────
             print("[PW] Clicking Add application...")
-            await page.click('button:has-text("Add application")', timeout=15000)
-            await page.wait_for_load_state("networkidle")
+            await page.wait_for_selector(
+                'button:has-text("Add application")',
+                timeout=20000
+            )
+            await page.click('button:has-text("Add application")')
+            await page.wait_for_timeout(3000)
             await page.screenshot(path="pw_03_add_app.png")
 
-            # Select custom app
-            print("[PW] Selecting custom application...")
+            # ── Select custom app option ──────────────────────────────────
+            print("[PW] Selecting custom application type...")
             try:
-                await page.click(
+                await page.wait_for_selector(
                     'label:has-text("I have an application I want to set up")',
                     timeout=10000
                 )
+                await page.click(
+                    'label:has-text("I have an application I want to set up")'
+                )
             except Exception:
-                await page.click('input[type="radio"]', timeout=10000)
+                print("[PW] Trying radio button instead...")
+                radios = await page.query_selector_all('input[type="radio"]')
+                if radios:
+                    await radios[-1].click()
 
             await page.wait_for_timeout(1000)
-            await page.click('button:has-text("Next")')
-            await page.wait_for_load_state("networkidle")
-            await page.screenshot(path="pw_04_app_details.png")
+            await page.screenshot(path="pw_04_selected_type.png")
 
-            # Fill name
+            await page.click('button:has-text("Next")')
+            await page.wait_for_timeout(3000)
+            await page.screenshot(path="pw_05_app_details.png")
+
+            # ── Fill display name ─────────────────────────────────────────
             print(f"[PW] Filling app name: {APP_NAME}")
+            filled = False
             for selector in [
                 'input[id*="displayName"]',
                 'input[placeholder*="isplay name"]',
                 'input[name*="displayName"]',
-                'input[type="text"]'
+                'input[name*="name"]',
+                'input[type="text"]:visible'
             ]:
                 try:
-                    await page.fill(selector, APP_NAME, timeout=5000)
+                    await page.wait_for_selector(selector, timeout=5000)
+                    await page.fill(selector, APP_NAME)
+                    filled = True
                     print(f"[PW] Filled with selector: {selector}")
                     break
                 except Exception:
                     continue
 
-            await page.screenshot(path="pw_05_filled.png")
+            if not filled:
+                # Last resort — take screenshot so we can see the page
+                await page.screenshot(path="pw_fill_failed.png")
+                raise Exception("Could not find display name input — check pw_fill_failed.png")
 
-            # Submit
+            await page.screenshot(path="pw_06_filled.png")
+
+            # ── Submit ────────────────────────────────────────────────────
             print("[PW] Submitting...")
             await page.click('button:has-text("Submit")')
-            await page.wait_for_load_state("networkidle")
-            await page.screenshot(path="pw_06_submitted.png")
+            await page.wait_for_timeout(4000)
+            await page.screenshot(path="pw_07_submitted.png")
             print(f"[PW] Application '{APP_NAME}' created successfully")
 
-            # Assign group
+            # ── Assign DemoGroup ──────────────────────────────────────────
             print("[PW] Assigning DemoGroup...")
             try:
-                await page.click(
+                await page.wait_for_selector(
                     'button:has-text("Assign users and groups")',
                     timeout=10000
                 )
-                await page.wait_for_load_state("networkidle")
-                await page.fill(
-                    'input[type="search"]', "DemoGroup"
-                )
+                await page.click('button:has-text("Assign users and groups")')
                 await page.wait_for_timeout(2000)
+
+                await page.fill('input[type="search"]', "DemoGroup")
+                await page.wait_for_timeout(2000)
+
                 await page.click('input[type="checkbox"]')
+                await page.wait_for_timeout(500)
                 await page.click('button:has-text("Assign")')
-                await page.wait_for_load_state("networkidle")
-                await page.screenshot(path="pw_07_group_assigned.png")
+                await page.wait_for_timeout(2000)
+                await page.screenshot(path="pw_08_group_assigned.png")
                 print("[PW] DemoGroup assigned")
             except Exception as e:
                 print(f"[PW] Group assignment skipped: {e}")
-                await page.screenshot(path="pw_07_group_error.png")
+                await page.screenshot(path="pw_08_group_error.png")
 
         except Exception as e:
             print(f"[PW ERROR] {e}")
