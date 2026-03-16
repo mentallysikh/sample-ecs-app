@@ -27,18 +27,50 @@ def get_sso_instance():
 
 # ── 2. Create IdP (SAML Provider) ─────────────────────────────────────────────
 def create_idp():
-    saml_metadata = """<?xml version="1.0"?>
+    saml_metadata = """<?xml version="1.0" encoding="UTF-8"?>
 <EntityDescriptor
   xmlns="urn:oasis:names:tc:SAML:2.0:metadata"
-  entityID="https://demo-idp.example.com">
+  xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+  xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"
+  entityID="https://demo-idp.example.com/saml/metadata">
   <IDPSSODescriptor
     WantAuthnRequestsSigned="false"
     protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
+    <KeyDescriptor use="signing">
+      <ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+        <ds:X509Data>
+          <ds:X509Certificate>
+MIICpDCCAYwCCQDU+pQ4pHgSpDANBgkqhkiG9w0BAQsFADAUMRIwEAYDVQQDDAls
+b2NhbGhvc3QwHhcNMjMwMTAxMDAwMDAwWhcNMjQwMTAxMDAwMDAwWjAUMRIwEAYD
+VQQDDAlsb2NhbGhvc3QwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC7
+o4qne60TB3pnGK6OxBGDFjMiBezHJxRXP0JNLFS4nFJTufUOHBbAGMG5DKFB7BQ
+eISHITExAFZbMEkU5ucMdXIr4DWMflSe3XvTGg5eERxInSsHbFoJG0EQKXQ9sld
+mJEIalh5WLHYK9GxJy7T0paXbCBBMHRDwit3qT6iCpNPUwoIQkzgbDDiGHeFNmBO
+BOaFvOfSqblsLnXnNnSHXaWKBK7fBCKTxeVMdFqPaFJHXgEEajsXAi6TTlqg9AIL
+kqmKE0TuAeJkqmCxMV6QIDAQABMA0GCSqGSIb3DQEBCwUAA4IBAQCCeKPBjQMBQT
+YnkMSafNnwMkfMAQpKcz9RKhBMeJAgMBAAE=
+          </ds:X509Certificate>
+        </ds:X509Data>
+      </ds:KeyInfo>
+    </KeyDescriptor>
+    <NameIDFormat>
+      urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress
+    </NameIDFormat>
+    <NameIDFormat>
+      urn:oasis:names:tc:SAML:2.0:nameid-format:persistent
+    </NameIDFormat>
+    <NameIDFormat>
+      urn:oasis:names:tc:SAML:2.0:nameid-format:transient
+    </NameIDFormat>
     <SingleSignOnService
       Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
-      Location="https://demo-idp.example.com/sso"/>
+      Location="https://demo-idp.example.com/sso/saml"/>
+    <SingleSignOnService
+      Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
+      Location="https://demo-idp.example.com/sso/saml"/>
   </IDPSSODescriptor>
 </EntityDescriptor>"""
+
     try:
         resp    = iam.create_saml_provider(
             SAMLMetadataDocument=saml_metadata,
