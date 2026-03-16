@@ -27,13 +27,34 @@ def get_sso_instance():
 
 # ── 2. Create IdP (SAML Provider) ─────────────────────────────────────────────
 def create_idp():
-    saml_metadata = """<?xml version="1.0" encoding="UTF-8"?>
+    import subprocess
+    import os
+
+    # Generate cert if it doesn't exist
+    if not os.path.exists("/tmp/idp-cert.pem"):
+        subprocess.run([
+            "openssl", "req", "-x509", "-newkey", "rsa:2048",
+            "-keyout", "/tmp/idp-key.pem",
+            "-out", "/tmp/idp-cert.pem",
+            "-days", "365", "-nodes",
+            "-subj", "/CN=demo-idp/O=Demo/C=US"
+        ], check=True, capture_output=True)
+        print("[BOTO3] Generated self-signed certificate")
+
+    # Read certificate content
+    cert_result = subprocess.run(
+        "openssl x509 -in /tmp/idp-cert.pem -outform PEM | grep -v 'BEGIN\\|END' | tr -d '\\n'",
+        shell=True, capture_output=True, text=True, check=True
+    )
+    cert = cert_result.stdout.strip()
+
+    saml_metadata = f"""<?xml version="1.0" encoding="UTF-8"?>
 <EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" entityID="https://demo-idp.example.com">
   <IDPSSODescriptor WantAuthnRequestsSigned="false" protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
     <KeyDescriptor use="signing">
       <ds:KeyInfo>
         <ds:X509Data>
-          <ds:X509Certificate>MIIDPzCCAiegAwIBAgIUbQQS1RUw3qHHMwJLSxlBr93ily8wDQYJKoZIhvcNAQELBQAwLzERMA8GA1UEAwwIZGVtby1pZHAxDTALBgNVBAoMBERlbW8xCzAJBgNVBAYTAlVTMB4XDTI2MDMxNjEwMzUwMloXDTI3MDMxNjEwMzUwMlowLzERMA8GA1UEAwwIZGVtby1pZHAxDTALBgNVBAoMBERlbW8xCzAJBgNVBAYTAlVTMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAv2532WuGDSgSqSikSQFkDdg7D/bsI6fLlHQCRA03sCS7v+vectmCp614sLQxaqLUqZvn6RA3JbJMPjmFb8FLEiua7rGv3PTWP8tQYKSX6SomAyn7NRNofqRONEKPUdCq3TRX+WNNZfaHyH+pBr/QLUObb7qCmAFBmmhjc29LIyHpeDRi1ipE+ha/81no/uYFm+IfP5XfRTbtfhZiyIcqABmNq+Xm+CcNiptQEKBVchXMAjmt8MT4h4rBAZx5+7WZMvVus5BCf7T9PWrBSWarZMhouyEK5bcgEVoSedBryMSnQ8JUtTHyxDatXNPF+Fm7snSygFxlgIBceJGVqmIeSQIDAQABo1MwUTAdBgNVHQ4EFgQUENQVfw4YXN9+Ti2AZGjNXmSgndAwHwYDVR0jBBgwFoAUENQVfw4YXN9+Ti2AZGjNXmSgndAwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAlYjxLT231s+ZTG8y+BRnQF/c/3zY6qF2ShyIql4NOG0VWdP9dO0M6pP5r6+apTlh7AMg1tDwDT9+VcuoylDGUKjyYNZIKHG4V/CirKT/INiqeUhqPC0QtMcZBGWsCk6esgzD6FGCeUZv2+6XRB5Vf2te83rdhQ6TSoQQ88Qq39b9x5kz+0eicYfHFDKF1D+aymMT9Qx6VkTNLXnvj/JuDB5DLZABy+sZDDxRWixb9ZZjDOsKxpP0NZ9znIisDlYgHbJ0vEJJON0OhaGR3EYEz/dhZQ5eEIwsx+3CJemc06tPwu3xDxZcn+woWoRJhfAXQeiKNbo5jdMvC2wTYYGN1g==</ds:X509Certificate>
+          <ds:X509Certificate>{cert}</ds:X509Certificate>
         </ds:X509Data>
       </ds:KeyInfo>
     </KeyDescriptor>
@@ -42,6 +63,8 @@ def create_idp():
     <SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="https://demo-idp.example.com/sso/saml"/>
   </IDPSSODescriptor>
 </EntityDescriptor>"""
+
+    print(f"[BOTO3] Metadata length: {len(saml_metadata)} chars")
 
     try:
         resp    = iam.create_saml_provider(
