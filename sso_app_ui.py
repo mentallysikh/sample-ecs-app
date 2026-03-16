@@ -46,6 +46,7 @@ def get_federation_url():
     print("[FED] Federation URL generated")
     return login_url
 
+
 async def run():
     login_url = get_federation_url()
 
@@ -62,7 +63,6 @@ async def run():
             )
         )
         page = await context.new_page()
-
         LOAD = "domcontentloaded"
 
         try:
@@ -72,7 +72,8 @@ async def run():
             await page.wait_for_timeout(3000)
             await page.screenshot(path="pw_01_login.png")
             print("[PW] Logged in")
-# ── Navigate to Applications ──────────────────────────────────
+
+            # ── Navigate to Applications ──────────────────────────────────
             print("[PW] Navigating to Applications...")
             await page.goto(
                 f"https://{REGION}.console.aws.amazon.com/singlesignon/home#/applications",
@@ -83,11 +84,9 @@ async def run():
             await page.screenshot(path="pw_02_applications.png")
             print("[PW] On applications page")
 
-            # Check if we're already on the add application wizard
-            # or if we need to click Add application first
+            # ── Check what's visible ──────────────────────────────────────
             recommended_visible = await page.is_visible('button:has-text("Recommended")')
             add_app_visible     = await page.is_visible('button:has-text("Add application")')
-
             print(f"[PW] Recommended visible: {recommended_visible}")
             print(f"[PW] Add application visible: {add_app_visible}")
 
@@ -97,10 +96,10 @@ async def run():
                 await page.wait_for_timeout(3000)
                 await page.screenshot(path="pw_03_add_app.png")
             else:
-                print("[PW] Already on wizard page — skipping Add application click")
+                print("[PW] Already on wizard — skipping Add application click")
                 await page.screenshot(path="pw_03_already_on_wizard.png")
 
-            # ── Select Customer managed (custom app) ──────────────────────
+            # ── Select Customer managed ───────────────────────────────────
             print("[PW] Selecting Customer managed application...")
             try:
                 await page.wait_for_selector(
@@ -116,14 +115,16 @@ async def run():
                 await page.screenshot(path="pw_04_type_error.png")
 
             # ── Click Next ────────────────────────────────────────────────
-            await page.wait_for_selector('button:has-text("Next")', timeout=10000)
+            await page.wait_for_selector(
+                'button:has-text("Next")', timeout=10000
+            )
             await page.click('button:has-text("Next")')
             await page.wait_for_timeout(3000)
             await page.screenshot(path="pw_05_after_next.png")
 
-            # ── Print buttons again to see what's on next page ────────────
+            # ── Print visible buttons on next page ────────────────────────
             buttons = await page.query_selector_all("button")
-            print(f"[PW] Buttons after Next:")
+            print("[PW] Buttons after Next:")
             for btn in buttons:
                 try:
                     txt = await btn.inner_text()
@@ -185,3 +186,16 @@ async def run():
             except Exception as e:
                 print(f"[PW] Group assignment skipped: {e}")
                 await page.screenshot(path="pw_08_group_error.png")
+
+        except Exception as e:
+            print(f"[PW ERROR] {e}")
+            await page.screenshot(path="pw_error.png")
+            raise
+
+        finally:
+            await browser.close()
+            print("[PW] Done")
+
+
+if __name__ == "__main__":
+    asyncio.run(run())
