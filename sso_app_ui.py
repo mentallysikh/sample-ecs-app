@@ -63,7 +63,6 @@ async def run():
         )
         page = await context.new_page()
 
-        # Use domcontentloaded everywhere — networkidle times out on AWS console
         LOAD = "domcontentloaded"
 
         try:
@@ -81,8 +80,27 @@ async def run():
                 timeout=60000,
                 wait_until=LOAD
             )
-            await page.wait_for_timeout(4000)
+            await page.wait_for_timeout(5000)
             await page.screenshot(path="pw_02_applications.png")
+
+            # ── Dump page HTML for debugging ──────────────────────────────
+            content = await page.content()
+            with open("pw_page_content.html", "w") as f:
+                f.write(content)
+            print("[PW] Page content saved")
+
+            # ── Print all visible button texts ────────────────────────────
+            buttons = await page.query_selector_all("button")
+            print(f"[PW] Found {len(buttons)} buttons on page:")
+            for btn in buttons:
+                try:
+                    txt = await btn.inner_text()
+                    vis = await btn.is_visible()
+                    if txt.strip():
+                        print(f"  button: '{txt.strip()}' visible={vis}")
+                except Exception:
+                    pass
+
             print("[PW] On applications page")
 
             # ── Click Add application ─────────────────────────────────────
@@ -126,7 +144,7 @@ async def run():
                 'input[placeholder*="isplay name"]',
                 'input[name*="displayName"]',
                 'input[name*="name"]',
-                'input[type="text"]:visible'
+                'input[type="text"]'
             ]:
                 try:
                     await page.wait_for_selector(selector, timeout=5000)
@@ -138,7 +156,6 @@ async def run():
                     continue
 
             if not filled:
-                # Last resort — take screenshot so we can see the page
                 await page.screenshot(path="pw_fill_failed.png")
                 raise Exception("Could not find display name input — check pw_fill_failed.png")
 
