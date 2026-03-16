@@ -28,46 +28,18 @@ def get_sso_instance():
 # ── 2. Create IdP (SAML Provider) ─────────────────────────────────────────────
 def create_idp():
     saml_metadata = """<?xml version="1.0" encoding="UTF-8"?>
-<EntityDescriptor
-  xmlns="urn:oasis:names:tc:SAML:2.0:metadata"
-  xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
-  xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"
-  entityID="https://demo-idp.example.com/saml/metadata">
-  <IDPSSODescriptor
-    WantAuthnRequestsSigned="false"
-    protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
+<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" entityID="https://demo-idp.example.com">
+  <IDPSSODescriptor WantAuthnRequestsSigned="false" protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
     <KeyDescriptor use="signing">
-      <ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+      <ds:KeyInfo>
         <ds:X509Data>
-          <ds:X509Certificate>
-MIICpDCCAYwCCQDU+pQ4pHgSpDANBgkqhkiG9w0BAQsFADAUMRIwEAYDVQQDDAls
-b2NhbGhvc3QwHhcNMjMwMTAxMDAwMDAwWhcNMjQwMTAxMDAwMDAwWjAUMRIwEAYD
-VQQDDAlsb2NhbGhvc3QwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC7
-o4qne60TB3pnGK6OxBGDFjMiBezHJxRXP0JNLFS4nFJTufUOHBbAGMG5DKFB7BQ
-eISHITExAFZbMEkU5ucMdXIr4DWMflSe3XvTGg5eERxInSsHbFoJG0EQKXQ9sld
-mJEIalh5WLHYK9GxJy7T0paXbCBBMHRDwit3qT6iCpNPUwoIQkzgbDDiGHeFNmBO
-BOaFvOfSqblsLnXnNnSHXaWKBK7fBCKTxeVMdFqPaFJHXgEEajsXAi6TTlqg9AIL
-kqmKE0TuAeJkqmCxMV6QIDAQABMA0GCSqGSIb3DQEBCwUAA4IBAQCCeKPBjQMBQT
-YnkMSafNnwMkfMAQpKcz9RKhBMeJAgMBAAE=
-          </ds:X509Certificate>
+          <ds:X509Certificate>MIIDpDCCAoygAwIBAgIGAXh5IiWCMA0GCSqGSIb3DQEBCwUAMIGSMQswCQYDVQQGEwJVUzETMBEGA1UECAwKQ2FsaWZvcm5pYTEWMBQGA1UEBwwNU2FuIEZyYW5jaXNjbzENMAsGA1UECgwET2t0YTEUMBIGA1UECwwLU1NPUHJvdmlkZXIxEzARBgNVBAMMCmRlbW8taWRwLjExEzARBgkqhkiG9w0BCQEWBHRlc3QwHhcNMjMwMTAxMDAwMDAwWhcNMjQwMTAxMDAwMDAwWjCBkjELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFjAUBgNVBAcMDVNhbiBGcmFuY2lzY28xDTALBgNVBAoMBE9rdGExFDASBgNVBAsMC1NTT1Byb3ZpZGVyMRMwEQYDVQQDDApkZW1vLWlkcC4xMRMwEQYJKoZIhvcNAQkBFgR0ZXN0MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2a2rwplBQLF29amygykEMmYz0+Kcj3bKBp29OWJbIBBOBvMOoAhTGMiRsBSbkAEKUJrHUCBJlJYpSMDPPbHBNJOTwX0roRO7OFi8nAtcLJiGzjBZvFjDnFRjFgPCCxBCVmMLpCBYSEoiRrF8knpEjC9O/Y4UBxFkimJ8GrXlwJOT5jUfhMnkHVdcrmilHvnz3E7mJYe7V3MTdX0aGPVpfOs3AkwYrVBRfQnmkgFIcStPFYz3TjVp6x79sPzNHvKnmSKsFiw8LT5GXpFhHyIhEr2nKlrXZfBa7tQ8gZ8Y2AGhWFSImfE39jlAFKMCiqM5UJQNJJqRXBPRSBzMH9yZwIDAQABMA0GCSqGSIb3DQEBCwUAA4IBAQBxSJPCCOoFqTMIRQNJLAI8PJDZ1bvxOrembleN8OoQ9JTMKrFovbWzBBpLRhKJbHy6MJKL8rVmTHLq5UMkgGPSjSPjZh7AQqTsXBkLfTpOh5LBZKMQ4Q6o7CMrMHOSpGJJHCPEe3KJ7rD5mJKHvE4HbkPkRZLPMxO7VoFGHLFnZtKYEXwXoMTbJFm6gQJaWLo0GWTZ2aorKeKR5KSLKJLQ3hGJxKKQkHQJqHxFMHxwqZVQqHFJkRBNxKBVFKPGrIMJQKHJQLKJRLHNBKMNQKJHLKJNQLKJNQLKBVNLKJBNQLKJBNQLKJBNQLKJBNQLKJBNQ</ds:X509Certificate>
         </ds:X509Data>
       </ds:KeyInfo>
     </KeyDescriptor>
-    <NameIDFormat>
-      urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress
-    </NameIDFormat>
-    <NameIDFormat>
-      urn:oasis:names:tc:SAML:2.0:nameid-format:persistent
-    </NameIDFormat>
-    <NameIDFormat>
-      urn:oasis:names:tc:SAML:2.0:nameid-format:transient
-    </NameIDFormat>
-    <SingleSignOnService
-      Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
-      Location="https://demo-idp.example.com/sso/saml"/>
-    <SingleSignOnService
-      Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
-      Location="https://demo-idp.example.com/sso/saml"/>
+    <NameIDFormat>urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress</NameIDFormat>
+    <SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="https://demo-idp.example.com/sso/saml"/>
+    <SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="https://demo-idp.example.com/sso/saml"/>
   </IDPSSODescriptor>
 </EntityDescriptor>"""
 
